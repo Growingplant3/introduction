@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+  <html lang="ja">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>技術的なこと</title>
+  </head>
+  
+  <body>
+    <div style="display: inline-block; margin-left: 3rem;">
+      <h2>ボタン出力の工夫</h2>
+      <p>
+        <a href="https://github.com/Growingplant3/connect/blob/master/app/helpers/application_helper.rb">/app/helpers/application_helper.rb</a><br>
+        viewのif文を減らす為にhelperメソッドを約20個自作しました。<br>
+        ①ユーザーがログインしている状態ではユーザーのログアウトボタンを出力するが、<br>
+        ユーザーがログインしていない状態では薬局のログインボタンを出力する。<br>
+        def user_sign_in_or_sign_out_button<br>
+        　if user_signed_in?<br>
+        　　link_to t('button.sign_out'), destroy_user_session_path, method: :delete, class: "btn btn-warning"<br>
+        　else<br>
+        　　unless pharmacy_signed_in?<br>
+        　　　link_to t('devise.sessions.new.user_sign_in'), new_user_session_path, class: "btn btn-warning"<br>
+        　　end<br>
+        　end<br>
+        end<br>
+        <br>
+        ②薬局でログインしている場合には部分テンプレートを呼び出す。<br>
+        ※メソッドや部分テンプレートの名称は今一つなので真似しないように笑<br>
+        def pharmacy_button_in_medicine_notebook_records_index(user)<br>
+        　if pharmacy_signed_in?<br>
+        　　render partial: "shared/pharmacy_button_in_medicine_notebook_records_index", locals: { user: user }<br>
+        　end<br>
+        end<br>
+      </p>
+
+      <h2>ransackの工夫</h2>
+      <p>
+        <a href="https://github.com/Growingplant3/connect/blob/master/app/controllers/users_controller.rb">/app/controllers/users_controller.rb</a><br>
+        def index<br>
+        　limited_user_ids = Pharmacy.have_search_permission(current_pharmacy.id)　①<br>
+        　@gender_choices = User.set_gender　②<br>
+        　@q = User.standard_exclusion(limited_user_ids).selection(params[:q]).ransack(params[:q])　③<br>
+        　@Users = @q.result(distinct: true)<br>
+        end<br>
+        ①(ログイン中の薬局が情報提供許可を得ている)ユーザーのid一覧を変数に代入。中身のデータ型はArray<br>
+        ②検索のプルダウンで使用する性別の値とidの組み合わせをHash化してインスタンス変数に代入。<br>
+        ③standard_exclusionは①で作成した配列を引数にとるscope。<br>
+        開発者/管理者/情報提供不許可ユーザーを一覧として出力するのを除外しています。<br>
+        selectionはransackの入力欄に打ち込んだ値を使うクラスメソッド。<br>
+        処理が複雑なので詳細は割愛しますが、範囲誕生日検索を実現しています。<br>
+        ※本来はransackの入力欄を工夫した方が良いので、これは真似しないように笑<br>
+      </p>
+    </div>
+
+    <div style="display: inline-block; margin-left: 3rem;">
+      <h2>Rspecの工夫</h2>
+      <p>
+        <a href="https://github.com/Growingplant3/connect/blob/master/spec/rails_helper.rb">/spec/rails_helper.rb</a><br>
+        テストコードは全部で216個作成しました。なるべく簡潔な記述にするために次の記述をしています。<br>
+        RSpec.configure do |config|<br>
+        　config.include FactoryBot::Syntax::Methods　①<br>
+        　config.include Devise::Test::IntegrationHelpers, type: :system　②<br>
+        　config.include UserLoginModule　③<br>
+        　config.include PharmacyLoginModule　④<br>
+        ①…このモジュールをテスト環境にincludeした場合、テストコード記述の簡略化が可能です。<br>
+        let(:user) { FactoryBot.create(:user) } → let(:user) { create(:user) } 詳しくは<a href="https://www.rubydoc.info/gems/factory_bot/FactoryBot/Syntax/Methods">こちら</a><br>
+        ②…このモジュールをテスト環境にincludeした場合、deviseのヘルパーメソッドがテストコードで使用できます。<br>
+        今回は自作モジュールを作った為に利用しませんでしたが、詳しくは<a href="https://rubydoc.info/github/plataformatec/devise/master/Devise/Test#:~:text=Devise%3A%3ATest%3A%3AIntegrationHelpers,or%20signin%20out%20a%20record.">こちら</a><br>
+        ③④…自作のモジュールをテスト環境にincludeしています。<br>
+        /spec/support配下に自作のモジュールを作成し、テストコード内で使用しています。<br>
+      </p>
+
+      <h2>デバッグの工夫</h2>
+      <p>
+        <a href="https://github.com/Growingplant3/connect/blob/master/app/views/layouts/application.html.erb">/app/views/layouts/application.html.erb</a><br>
+        <% if Rails.env == "development" %><br>
+        　<%= params %><br>
+        <% end %><br>
+        paramsはActionController::Parametersクラスのインスタンスです。<br>
+        binding.irb(もしくはbinding.pry)中だけで使えるものではありません。<br>
+        view上で現在使用しているcontrollerやaction、また様々な入力欄に打ち込んだ値などを確認できます。<br>
+        本番環境では出力されないようif文をつけています。<br>
+      </p>
+
+      <h2>ActiveRecordの動的検索</h2>
+      <p>
+        <a href="https://railsguides.jp/active_record_querying.html">Railsガイド</a><br>
+        User.find_by_email("user@gmail.com")　と　User.find_by(email: "user@gmail.com")　は同義です。<br>
+        <a href="https://github.com/Growingplant3/connect/blob/master/app/controllers/homes_controller.rb">/app/controllers/homes_controller.rb</a><br>
+        サンプルログインボタンで使用しています。(一部省略)<br>
+        def sample_user_first<br>
+        　user = User.find_by_email("kikukawa@gmail.com")<br>
+        　sign_in user<br>
+        　flash[:notice] = I18n.t('message.sample_user_login')<br>
+        　redirect_to user<br>
+        end<br>
+        本来はcontrollerにビジネスロジックを書いてはいけません笑<br>
+      </p>
+    </div>
+
+    <div>
+      <a href="./description5.html">戻る</a><br>
+      <a href="./description1.html">進む</a><br>
+    </div>
+  </body>
+</html>
